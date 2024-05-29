@@ -2,6 +2,11 @@ import * as Three from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import * as dat from 'dat.gui';
 
+import stars from '../img/stars.jpeg';
+import nebula from '../img/stars.jpeg';
+// this will import the image.img file as a constant image
+// needs to be 1:1 ratio for cubeTextLoader.
+
 const renderer = new Three.WebGLRenderer();
 renderer.setSize( window.innerWidth, window.innerHeight );
 
@@ -76,8 +81,8 @@ scene.add(sphere);
 sphere.position.set(-10, 10, 0);
 sphere.castShadow = true;
 // Lights
-const ambientLight = new Three.AmbientLight(0xeeeeee);
-scene.add(ambientLight);
+//const ambientLight = new Three.AmbientLight(0xeeeeee);
+//scene.add(ambientLight);
 
 //const dirLight = new Three.DirectionalLight(0xFFFFFF, 0.8);
 //scene.add(dirLight);
@@ -97,12 +102,36 @@ scene.add(ambientLight);
 const spotLight = new Three.SpotLight(0xFFFFFF);
 scene.add(spotLight);
 spotLight.position.set(-100, 100, 0);
+spotLight.decay = 0; // This was very important
 spotLight.castShadow = true;
-spotLight.angle = 0.2;
+spotLight.angle = 0.12;
 
+scene.add(spotLight);
 
+// SpotLight Helper Object
 const sLightHelper = new Three.SpotLightHelper(spotLight);
 scene.add(sLightHelper);
+
+// Adding FOG
+//scene.fog = new Three.Fog(0xFFFFFF, 0, 200); // method #1
+// scene.fog = new Three.FogExp1(0xFFFFFF, 0.01); // fog grows exponentially with dist.
+
+// set color
+//renderer.setClearColor(0xFFEEAA);
+// set background color
+const textureLoader = new Three.TextureLoader();
+//scene.background = textureLoader.load(stars); // sets just background to stars
+
+// Cube texture loader
+const cubeText = new Three.CubeTextureLoader();
+scene.background = cubeText.load([
+	stars,
+	nebula,
+	stars,
+	nebula,
+	stars,
+	nebula
+]);
 
 // Dat.gui
 const gui = new dat.GUI();
@@ -112,7 +141,11 @@ const gui = new dat.GUI();
 const options = {
 	sphereColor: "#ffea00",
 	wireframe: false,
-	speed: 0.01
+	speed: 0.01,
+
+	angle: 0.2,
+	penumbra: 0,
+	intensity: 1
 };
 
 gui.addColor(options, 'sphereColor').onChange(function(e) {
@@ -124,21 +157,75 @@ gui.add(options, 'wireframe').onChange( function(e){
 });
 
 gui.add(options, 'speed', 0.1, 0.5);
+gui.add(options, 'angle', 0, 1);
+gui.add(options, 'penumbra', 0, 1);
+gui.add(options, 'intensity', 0, 1);
 
 // Geometric Transformations
 // box.rotation.x = 5;
 // box.rotation.y = 0.01;
 
+// new box with custom faces
+const box2Geo = new Three.BoxGeometry(4, 4, 4);
+const box2Mat = new Three.MeshStandardMaterial({
+	color: 0xFF0000, // remove for not having any color
+	map: textureLoader.load(stars)
+	// the wallpaper will be red because of color = FF0000
+});
+
+// Multi material box
+const box2MultiMat = [
+	new Three.MeshBasicMaterial({map: textureLoader.load(stars)}),
+	new Three.MeshBasicMaterial({color: 0xFF0000}),
+	new Three.MeshBasicMaterial({map: textureLoader.load(stars)}),
+	new Three.MeshBasicMaterial({color: 0xFF0000}),
+	new Three.MeshBasicMaterial({map: textureLoader.load(stars)}),
+	new Three.MeshBasicMaterial({color: 0xFF0000})
+];
+
+//const box2 = new Three.Mesh(box2Geo, box2Mat);
+const box2 = new Three.Mesh(box2Geo, box2MultiMat);
+scene.add(box2);
+box2.position.set(0, 15, 20);
+
 //////////// Making Sphere Bounce, and adding slider
 //////////// to control bouncing speed
 let step = 0;
 
+// Mouse Interactions
+const mousePos = new Three.Vector2();
+
+window.addEventListener('mousemove', function(e){
+	mousePos.x = (e.clientX / window.innerWidth) * 2 - 1;
+	mousePos.y = (e.clientY / window.innerHeight) * 2 + 1;
+});
+
+const rayCaster = new Three.Raycaster();
+const sphereId = sphere.id;
+//const sphereId = 20;
 function animate(time) {
 	box.rotation.x = time / 1000; // this basically controls the speed
 	box.rotation.y = time / 1000;
 
 	step += options.speed;
-	sphere.position.y = 4 + 10 * Math.abs( Math.sin(step) ); // sinusoidal func => wave
+	sphere.position.y = 4 + 10 * Math.abs( Math.sin(step) );
+	// sinusoidal func => wave
+
+	spotLight.angle = options.angle;
+	spotLight.penumbra= options.penumbra;
+	spotLight.intensity= options.intensity;
+	sLightHelper.update();
+	
+	// set two ends of ray:- camera to mouse
+	rayCaster.setFromCamera(mousePos, camera);
+	const intersects = rayCaster.intersectObjects(scene.children);
+	//console.log(intersects);
+
+	for(let i = 0; i < intersects.length; i++){
+		console.log(intersects[i].object.id, sphereId);
+		if ( intersects[i].object.id === sphereId )
+			intersects[i].object.material.color.set(0x0000FF);
+	}
 
 	renderer.render(scene, camera);
 }
